@@ -1,0 +1,23 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# 🤖 HINATA BOT - REQUIREMENTS
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Core Telegram Bot API (Required)
+python-telegram-bot>=20.0
+
+# Async Support (Required)
+aiohttp>=3.8.0
+asyncio>=3.4.3
+
+# Database Support
+# SQLite3 is built-in (no install needed)
+# For PostgreSQL (optional, for big databases):
+# psycopg2-binary>=2.9.0
+
+# Environment Variables (Optional but recommended)
+python-dotenv>=1.0.0
+
+# Logging (Built-in, no install needed)
+
+# No API keys needed! 100% Free!
+# No OpenAI, No Paid Services!
