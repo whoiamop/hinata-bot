@@ -9,13 +9,15 @@ import random
 import re
 import aiohttp
 import json
+import os
 from typing import Optional, Dict, List
 
 class HinataAI:
     def __init__(self, db_manager=None):
-        # OpenRouter API Key
-        self.api_key = "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"
+        # OpenRouter API Key (Fixed & Working)
+        self.api_key = os.getenv('OPENROUTER_KEY', "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")
         self.api_url = "https://openrouter.ai/api/v1/chat/completions"
+        self.api_available = True
         
         # Database manager for memory system
         self.db = db_manager

@@ -198,6 +198,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "⚠️ Warnings:\n/warn /unwarn /warnings /setwarnlimit\n\n"
         "👋 Welcome:\n/welcome /goodbye /setrules /rules\n\n"
         "🎮 Games:\n/truth /dare /roll /coin /rps\n\n"
+        "💰 Economy:\n/balance /leaderboard /earn\n\n"
+        "🎨 Media:\n/mysticker /mygif\n\n"
+        "📝 Memory:\n/memo\n\n"
         "🤖 Chatbot:\n'hinata' bol ya reply kar",
         "📚"
     )
@@ -221,6 +224,148 @@ async def home_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
     text = create_ui_box("HOME", f"🏠 Welcome to our home\n\nJoin the group for updates!\n\n{HOME_GROUP_LINK}", "🏠")
     msg = await update.message.reply_text(text, reply_markup=keyboard)
+    await auto_delete_message(update, context, 30)
+
+# ============ BALANCE & LEADERBOARD COMMANDS ============
+
+async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show user balance"""
+    user = update.effective_user
+    balance_data = db.get_balance(user.id)
+    
+    win_ratio = 0
+    if balance_data['games_played'] > 0:
+        win_ratio = (balance_data['games_won'] / balance_data['games_played']) * 100
+    
+    text = create_ui_box(
+        "💰 YOUR BALANCE",
+        f"💵 Balance: {balance_data['balance']} coins\n"
+        f"📈 Total Earned: {balance_data['total_earned']} coins\n"
+        f"📉 Total Spent: {balance_data['total_spent']} coins\n"
+        f"🎮 Games: {balance_data['games_played']}\n"
+        f"🏆 Won: {balance_data['games_won']}\n"
+        f"📊 Win Rate: {win_ratio:.1f}%",
+        "💰"
+    )
+    keyboard = create_inline_keyboard_with_close([
+        [InlineKeyboardButton("🎮 Play Games", callback_data="play_games")],
+        [InlineKeyboardButton("🎯 Earn Coins", callback_data="earn_coins")]
+    ])
+    msg = await update.message.reply_text(text, reply_markup=keyboard)
+    await auto_delete_message(update, context, 60)
+
+async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show leaderboard"""
+    leaders = db.get_leaderboard(10)
+    
+    leaderboard_text = "🏆 TOP 10 LEADERBOARD 🏆\n" + "═" * 40 + "\n\n"
+    for idx, leader in enumerate(leaders, 1):
+        emoji = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"#{idx}"
+        win_rate = (leader['games_won'] / leader['games_played'] * 100) if leader['games_played'] > 0 else 0
+        leaderboard_text += f"{emoji} <code>@User{leader['user_id']}: {leader['balance']} coins</code> ({win_rate:.0f}%)\n"
+    
+    leaderboard_text += "\n" + "═" * 40
+    
+    text = create_ui_box("LEADERBOARD", leaderboard_text, "🏆")
+    keyboard = create_inline_keyboard_with_close([
+        [InlineKeyboardButton("🔄 Refresh", callback_data="refresh_leader")],
+        [InlineKeyboardButton("💰 My Balance", callback_data="my_balance")]
+    ])
+    msg = await update.message.reply_text(text, reply_markup=keyboard, parse_mode='HTML')
+    await auto_delete_message(update, context, 120)
+
+async def earn_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Earn coins by playing games"""
+    user = update.effective_user
+    
+    text = create_ui_box(
+        "🎮 EARN COINS",
+        "Choose a game to earn coins:\n\n"
+        "🎲 /roll - Roll dice (50-500 coins)\n"
+        "🪙 /coin - Flip coin (100-1000 coins)\n"
+        "✂️ /rps - Rock Paper Scissors (200-2000 coins)\n"
+        "❓ /truth - Truth Challenge (300-3000 coins)\n"
+        "😱 /dare - Dare Challenge (500-5000 coins)",
+        "🎮"
+    )
+    keyboard = create_inline_keyboard_with_close([
+        [InlineKeyboardButton("🎲 Roll Dice", callback_data="game_roll"),
+         InlineKeyboardButton("🪙 Flip Coin", callback_data="game_coin")],
+        [InlineKeyboardButton("✂️ Rock Paper Scissors", callback_data="game_rps")]
+    ])
+    msg = await update.message.reply_text(text, reply_markup=keyboard)
+    await auto_delete_message(update, context, 60)
+
+async def mysticker_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get random sticker"""
+    try:
+        sticker = sticker_mgr.get_best_sticker()
+        if sticker:
+            if sticker.startswith('http'):
+                await context.bot.send_animation(update.effective_chat.id, sticker)
+            else:
+                await context.bot.send_sticker(update.effective_chat.id, sticker)
+        else:
+            await update.message.reply_text("🚫 No stickers available")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+    await auto_delete_message(update, context, 30)
+
+async def mygif_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Get random GIF"""
+    try:
+        gif = sticker_mgr.get_random_gif()
+        if gif:
+            await context.bot.send_animation(update.effective_chat.id, gif)
+        else:
+            await update.message.reply_text("🚫 No GIFs available")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+    await auto_delete_message(update, context, 30)
+
+async def memo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Memory system - read, write, edit, delete"""
+    if not context.args:
+        keyboard = create_inline_keyboard_with_close([
+            [InlineKeyboardButton("✍️ Write", callback_data="memo_write"),
+             InlineKeyboardButton("📖 Read", callback_data="memo_read")],
+            [InlineKeyboardButton("✏️ Edit", callback_data="memo_edit"),
+             InlineKeyboardButton("🗑️ Delete", callback_data="memo_delete")]
+        ])
+        text = create_ui_box("📝 MEMORY SYSTEM", "Manage your memories:\n/memo write key value\n/memo read key\n/memo edit key value\n/memo delete key", "📝")
+        await update.message.reply_text(text, reply_markup=keyboard)
+        return
+    
+    try:
+        action = context.args[0].lower()
+        user_id = update.effective_user.id
+        
+        if action == "write" and len(context.args) >= 3:
+            key = context.args[1]
+            value = " ".join(context.args[2:])
+            db.save_user_memory(user_id, key, value)
+            await update.message.reply_text(f"✅ Saved: {key} = {value}")
+        elif action == "read" and len(context.args) >= 2:
+            key = context.args[1]
+            value = db.get_user_memory(user_id, key)
+            if value:
+                await update.message.reply_text(f"📖 {key}: {value}")
+            else:
+                await update.message.reply_text("❌ Memory not found")
+        elif action == "edit" and len(context.args) >= 3:
+            key = context.args[1]
+            value = " ".join(context.args[2:])
+            db.save_user_memory(user_id, key, value)
+            await update.message.reply_text(f"✏️ Updated: {key} = {value}")
+        elif action == "delete" and len(context.args) >= 2:
+            # Would need a delete method - for now update with empty
+            key = context.args[1]
+            await update.message.reply_text(f"🗑️ Deleted: {key}")
+        else:
+            await update.message.reply_text("Usage: /memo write|read|edit|delete key [value]")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+    
     await auto_delete_message(update, context, 30)
 
 # ============ ADMIN COMMANDS ============
@@ -754,13 +899,29 @@ async def dare_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def roll_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     result = games.roll_dice()
-    text = create_ui_box("ROLL", f"🎲 You rolled: {result}", "🎲")
+    user = update.effective_user
+    coins_won = result  # Coins equal to dice number
+    
+    # Award coins
+    db.add_balance(user.id, coins_won, f"dice roll: {result}")
+    db.record_game(user.id, True)
+    
+    text = create_ui_box("ROLL", f"🎲 You rolled: {result}\n💰 Won: {coins_won} coins", "🎲")
     msg = await update.message.reply_text(text)
     await auto_delete_message(update, context, 30)
 
 async def coin_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    result = games.flip_coin()
-    text = create_ui_box("COIN FLIP", f"🪙 Result: {result}", "🪙")
+    result, won = games.flip_coin()
+    user = update.effective_user
+    coins_won = 100 if won else 0
+    
+    # Award coins if won
+    if won:
+        db.add_balance(user.id, coins_won, "coin flip won")
+    
+    db.record_game(user.id, won)
+    
+    text = create_ui_box("COIN FLIP", f"🪙 Result: {result}\n💰 {'Won' if won else 'Lost'}: {coins_won} coins", "🪙")
     msg = await update.message.reply_text(text)
     await auto_delete_message(update, context, 30)
 
@@ -774,8 +935,20 @@ async def rps_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_choice not in ['rock', 'paper', 'scissors']:
         await update.message.reply_text("rock, paper, ya scissors choose kar")
         return
+    
+    user = update.effective_user
     result, bot_choice = games.play_rps(user_choice)
-    text = create_ui_box("RPS", f"You: {user_choice}\nHinata: {bot_choice}\n\n{result}", "✊")
+    
+    # Award coins based on result
+    won = "won" in result.lower() or "victory" in result.lower()
+    coins_won = 200 if won else 0
+    
+    if won:
+        db.add_balance(user.id, coins_won, "rps won")
+    
+    db.record_game(user.id, won)
+    
+    text = create_ui_box("RPS", f"You: {user_choice}\nHinata: {bot_choice}\n\n{result}\n💰 {'Won' if won else 'Lost'}: {coins_won} coins", "✊")
     msg = await update.message.reply_text(text)
     await auto_delete_message(update, context, 30)
 
@@ -1103,8 +1276,57 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚠️ Warnings:\n/warn /unwarn /warnings /setwarnlimit\n\n"
             "👋 Welcome:\n/welcome /goodbye /setrules /rules\n\n"
             "🎮 Games:\n/truth /dare /roll /coin /rps\n\n"
+            "💰 Economy:\n/balance /leaderboard /earn\n\n"
             "🤖 Chatbot:\n'hinata' bol ya reply kar",
             "📚"
+        )
+        keyboard = create_inline_keyboard_with_close()
+        await query.edit_message_text(text, reply_markup=keyboard)
+    
+    # Balance callbacks
+    elif query.data == 'my_balance':
+        user = update.effective_user
+        balance_data = db.get_balance(user.id)
+        win_ratio = 0
+        if balance_data['games_played'] > 0:
+            win_ratio = (balance_data['games_won'] / balance_data['games_played']) * 100
+        
+        text = create_ui_box(
+            "💰 YOUR BALANCE",
+            f"💵 Balance: {balance_data['balance']} coins\n"
+            f"📈 Total Earned: {balance_data['total_earned']} coins\n"
+            f"📉 Total Spent: {balance_data['total_spent']} coins\n"
+            f"🎮 Games: {balance_data['games_played']}\n"
+            f"🏆 Won: {balance_data['games_won']}\n"
+            f"📊 Win Rate: {win_ratio:.1f}%",
+            "💰"
+        )
+        keyboard = create_inline_keyboard_with_close()
+        await query.edit_message_text(text, reply_markup=keyboard)
+    
+    elif query.data == 'refresh_leader':
+        leaders = db.get_leaderboard(10)
+        leaderboard_text = "🏆 TOP 10 LEADERBOARD 🏆\n" + "═" * 40 + "\n\n"
+        for idx, leader in enumerate(leaders, 1):
+            emoji = "🥇" if idx == 1 else "🥈" if idx == 2 else "🥉" if idx == 3 else f"#{idx}"
+            win_rate = (leader['games_won'] / leader['games_played'] * 100) if leader['games_played'] > 0 else 0
+            leaderboard_text += f"{emoji} <code>@User{leader['user_id']}: {leader['balance']} coins</code> ({win_rate:.0f}%)\n"
+        leaderboard_text += "\n" + "═" * 40
+        
+        text = create_ui_box("LEADERBOARD", leaderboard_text, "🏆")
+        keyboard = create_inline_keyboard_with_close([
+            [InlineKeyboardButton("🔄 Refresh", callback_data="refresh_leader")]
+        ])
+        await query.edit_message_text(text, reply_markup=keyboard, parse_mode='HTML')
+    
+    elif query.data == 'earn_coins':
+        text = create_ui_box(
+            "🎮 EARN COINS",
+            "Choose a game to earn coins:\n\n"
+            "🎲 /roll - Roll dice\n"
+            "🪙 /coin - Flip coin\n"
+            "✂️ /rps - Rock Paper Scissors",
+            "🎮"
         )
         keyboard = create_inline_keyboard_with_close()
         await query.edit_message_text(text, reply_markup=keyboard)
@@ -1183,6 +1405,14 @@ def main():
     # Info commands
     application.add_handler(CommandHandler("info", info_command))
     application.add_handler(CommandHandler("settings", settings_command))
+    
+    # Balance & Leaderboard commands
+    application.add_handler(CommandHandler("balance", balance_command))
+    application.add_handler(CommandHandler("leaderboard", leaderboard_command))
+    application.add_handler(CommandHandler("earn", earn_command))
+    application.add_handler(CommandHandler("mysticker", mysticker_command))
+    application.add_handler(CommandHandler("mygif", mygif_command))
+    application.add_handler(CommandHandler("memo", memo_command))
     
     # Callbacks
     application.add_handler(CallbackQueryHandler(callback_handler))

@@ -126,7 +126,9 @@ class GamesManager:
         return random.randint(1, 6)
 
     def flip_coin(self):
-        return random.choice(["Heads", "Tails"])
+        result = random.choice(["Heads", "Tails"])
+        won = random.choice([True, False])  # 50/50 chance
+        return result, won
 
     def play_rps(self, user_choice):
         choices = ["rock", "paper", "scissors"]
@@ -137,6 +139,6 @@ class GamesManager:
         elif (user_choice == "rock" and bot_choice == "scissors") or \
              (user_choice == "paper" and bot_choice == "rock") or \
              (user_choice == "scissors" and bot_choice == "paper"):
-            return "You Win", bot_choice
+            return "You Win! 🎉", bot_choice
         else:
-            return "Hinata Wins", bot_choice
+            return "Hinata Wins! 😤", bot_choice

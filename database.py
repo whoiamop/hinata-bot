@@ -281,6 +281,21 @@ class DatabaseManager:
                 )
             ''')
             
+            # User Balance/Currency System
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_balance (
+                    user_id INTEGER PRIMARY KEY,
+                    balance INTEGER DEFAULT 0,
+                    total_earned INTEGER DEFAULT 0,
+                    total_spent INTEGER DEFAULT 0,
+                    games_played INTEGER DEFAULT 0,
+                    games_won INTEGER DEFAULT 0,
+                    last_earn TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
             # Create indexes for faster queries
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_filter_words_chat ON filter_words(chat_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_blocklist_chat ON blocklist(chat_id)')
@@ -820,7 +835,88 @@ class DatabaseManager:
             return [dict(row) for row in rows]
     
     # ═══════════════════════════════════════════════════════════════════════
-    # 🔧 MAINTENANCE METHODS
+    # � BALANCE/CURRENCY SYSTEM
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    def get_balance(self, user_id: int) -> Dict:
+        """Get user balance and earnings"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT user_id, balance, total_earned, total_spent, games_played, games_won 
+                FROM user_balance WHERE user_id = ?
+            ''', (user_id,))
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+            return {
+                'user_id': user_id,
+                'balance': 0,
+                'total_earned': 0,
+                'total_spent': 0,
+                'games_played': 0,
+                'games_won': 0
+            }
+    
+    def add_balance(self, user_id: int, amount: int, reason: str = "") -> int:
+        """Add coins to user balance"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO user_balance (user_id, balance, total_earned)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id) 
+                DO UPDATE SET balance = balance + ?, total_earned = total_earned + ?, updated_at = CURRENT_TIMESTAMP
+            ''', (user_id, amount, amount, amount, amount))
+    
+    def remove_balance(self, user_id: int, amount: int, reason: str = "") -> bool:
+        """Remove coins from user balance"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            balance_data = self.get_balance(user_id)
+            if balance_data['balance'] >= amount:
+                cursor.execute('''
+                    UPDATE user_balance 
+                    SET balance = balance - ?, total_spent = total_spent + ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE user_id = ?
+                ''', (amount, amount, user_id))
+                return True
+            return False
+    
+    def get_leaderboard(self, limit: int = 10) -> List[Dict]:
+        """Get top users by balance"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT user_id, balance, total_earned, games_won, games_played 
+                FROM user_balance 
+                ORDER BY balance DESC, total_earned DESC
+                LIMIT ?
+            ''', (limit,))
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+    
+    def record_game(self, user_id: int, won: bool):
+        """Record game result"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            if won:
+                cursor.execute('''
+                    INSERT INTO user_balance (user_id, games_played, games_won)
+                    VALUES (?, 1, 1)
+                    ON CONFLICT(user_id) 
+                    DO UPDATE SET games_played = games_played + 1, games_won = games_won + 1, updated_at = CURRENT_TIMESTAMP
+                ''', (user_id,))
+            else:
+                cursor.execute('''
+                    INSERT INTO user_balance (user_id, games_played)
+                    VALUES (?, 1)
+                    ON CONFLICT(user_id) 
+                    DO UPDATE SET games_played = games_played + 1, updated_at = CURRENT_TIMESTAMP
+                ''', (user_id,))
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # �🔧 MAINTENANCE METHODS
     # ═══════════════════════════════════════════════════════════════════════
     
     def cleanup_old_data(self, days: int = 30):
