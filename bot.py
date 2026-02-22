@@ -2,7 +2,8 @@
 """
 HINATA BOT - Created By Axl
 Advanced Telegram Group Management Bot
-Version: 2.0 - Zero Errors Edition
+Version: 3.0 - ULTIMATE EDITION
+Real Human Brain AI + Memory System
 """
 
 import logging
@@ -28,6 +29,7 @@ from database import DatabaseManager
 from chatbot import HinataAI
 from stickers import StickerManager
 from games import GamesManager
+from config import Config
 
 logging.basicConfig(
     format='%(asctime)s | %(levelname)-8s | %(message)s',
@@ -58,13 +60,20 @@ def release_lock():
 acquire_lock()
 atexit.register(release_lock)
 
+# Load configuration
+config = Config()
+
+# Initialize managers
 db = DatabaseManager()
-chatbot = HinataAI()
-sticker_mgr = StickerManager()
+chatbot = HinataAI(db_manager=db)  # Pass database for memory system
+sticker_mgr = StickerManager(db=db)  # Pass database for sticker collection
 games = GamesManager()
 
-OWNER_ID = 8430369957
-BOT_TOKEN = os.getenv('BOT_TOKEN', '')
+# Get from config
+OWNER_ID = config.OWNER_ID
+HOME_GROUP_LINK = config.HOME_GROUP_LINK
+SUPPORT_GROUP_LINK = config.SUPPORT_GROUP_LINK
+BOT_TOKEN = os.getenv('BOT_TOKEN', config.BOT_TOKEN)
 
 # ============ UTILITY FUNCTIONS ============
 
@@ -197,12 +206,21 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await auto_delete_message(update, context, 120)
 
 async def owner_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = create_ui_box("OWNER INFO", f"👑 Owner ID: {OWNER_ID}\n📱 Contact: @Axl", "👑")
-    msg = await update.message.reply_text(text)
+    keyboard = create_inline_keyboard_with_close([
+        [InlineKeyboardButton("👤 Profile", url=f"tg://user?id={OWNER_ID}")]
+    ])
+    text = create_ui_box("OWNER INFO", f"👑 Owner ID: {OWNER_ID}\n📱 Direct Chat: /start", "👑")
+    msg = await update.message.reply_text(text, reply_markup=keyboard)
     await auto_delete_message(update, context, 30)
 
 async def home_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = await update.message.reply_text("🏠 HOME: https://t.me/+nNmiWyK3oV04ZGM1")
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🏠 Home Group", url=HOME_GROUP_LINK)],
+        [InlineKeyboardButton("💬 Support", url=SUPPORT_GROUP_LINK)],
+        [InlineKeyboardButton("❌ Close", callback_data="close_msg")]
+    ])
+    text = create_ui_box("HOME", f"🏠 Welcome to our home\n\nJoin the group for updates!\n\n{HOME_GROUP_LINK}", "🏠")
+    msg = await update.message.reply_text(text, reply_markup=keyboard)
     await auto_delete_message(update, context, 30)
 
 # ============ ADMIN COMMANDS ============
@@ -459,12 +477,27 @@ async def antilink_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @admin_only
 async def lock_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Enhanced /lock command with inline options"""
     if not context.args:
-        text = create_ui_box("LOCK", "/lock all/text/media/stickers/polls/links", "🔒")
-        msg = await update.message.reply_text(text)
-        await auto_delete_message(update, context, 30)
+        # Show inline keyboard with lock options
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔒 All", callback_data="lock_all"),
+             InlineKeyboardButton("📝 Text", callback_data="lock_text")],
+            [InlineKeyboardButton("🎬 Media", callback_data="lock_media"),
+             InlineKeyboardButton("🔤 Stickers", callback_data="lock_stickers")],
+            [InlineKeyboardButton("📊 Polls", callback_data="lock_polls"),
+             InlineKeyboardButton("🔗 Links", callback_data="lock_links")],
+            [InlineKeyboardButton("❌ Close", callback_data="close_msg")]
+        ])
+        text = create_ui_box("LOCK OPTIONS", "Select what to lock:\n\n✅ = Not Locked\n🔒 = Locked", "🔒")
+        msg = await update.message.reply_text(text, reply_markup=keyboard)
         return
+    
     lock_type = context.args[0].lower()
+    await _apply_lock(lock_type, update, context)
+
+async def _apply_lock(lock_type: str, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Apply lock to chat"""
     perms = ChatPermissions(
         can_send_messages=True,
         can_send_media_messages=True,
@@ -485,7 +518,7 @@ async def lock_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif lock_type == 'links':
         perms.can_add_web_page_previews = False
     else:
-        await update.message.reply_text("galat type")
+        await update.message.reply_text("❌ galat option")
         return
     try:
         await update.effective_chat.set_permissions(perms)
@@ -842,27 +875,67 @@ async def hinata_chatbot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_for_hinata = False
     if message.reply_to_message and message.reply_to_message.from_user.id == context.bot.id:
         is_for_hinata = True
-    if 'hinata' in message.text.lower():
+    if any(trigger in message.text.lower() for trigger in config.CHATBOT_TRIGGERS):
         is_for_hinata = True
     if chat.type == ChatType.PRIVATE:
         is_for_hinata = True
     if not is_for_hinata:
         return
-    clean_text = re.sub(r'\bhinata\b', '', message.text, flags=re.IGNORECASE).strip()
-    response = await chatbot.generate_response(clean_text, user.first_name)
+    clean_text = re.sub(r'\bhinata\b|\bhana\b|\bbot\b', '', message.text, flags=re.IGNORECASE).strip()
+    
+    # Pass user_id for memory system
+    response = await chatbot.generate_response(clean_text, user_id=user.id, user_name=user.first_name)
+    
+    # Save user profile
+    try:
+        db.save_user_profile(user.id, user.first_name, user.username or "", "hinglish")
+    except:
+        pass
+    
     try:
         await message.reply_text(response)
+        # Log conversation
+        db.increment_message_count(chat.id, user.id)
     except:
         pass
 
 async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if random.random() < 0.3:
-        sticker_id = sticker_mgr.get_random_sticker()
-        if sticker_id:
-            try:
-                await context.bot.send_sticker(update.effective_chat.id, sticker_id)
-            except:
-                pass
+    """Handle incoming stickers - collect and respond"""
+    message = update.message
+    user = update.effective_user
+    chat = update.effective_chat
+    
+    # Collect the sticker (auto-learning)
+    if message and message.sticker and user:
+        try:
+            sticker = message.sticker
+            # Save to database for later use
+            sticker_mgr.save_sticker(
+                file_id=sticker.file_id,
+                file_unique_id=sticker.file_unique_id,
+                sticker_type="animated" if sticker.is_animated else "regular",
+                set_name=sticker.set_name or "collected",
+                user_id=user.id,
+                chat_id=chat.id
+            )
+        except Exception as e:
+            pass
+    
+    # Respond back with GIF or sticker (40% chance)
+    if random.random() < 0.4:
+        try:
+            # Get response media (GIF or sticker)
+            response_media = sticker_mgr.respond_to_sticker()
+            
+            # Check if it's a GIF URL or sticker ID
+            if response_media.startswith('http'):
+                # It's a GIF URL - send as animation
+                await context.bot.send_animation(chat.id, response_media)
+            else:
+                # It's a sticker ID - send as sticker
+                await context.bot.send_sticker(chat.id, response_media)
+        except Exception as e:
+            pass
 
 async def check_filters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
@@ -876,32 +949,47 @@ async def check_filters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     settings = db.get_group_settings(chat.id)
     text = message.text or message.caption or ""
     
-    # Check antilink - only owner can send links
+    # Check antilink - enhanced security with multiple patterns
     if settings.get('antilink_enabled', False) and text:
+        # Comprehensive link detection patterns
         link_patterns = [
-            r'https?://[^\s]+',
-            r't\.me/[^\s]+',
-            r'telegram\.me/[^\s]+',
-            r'www\.[^\s]+',
-            r'[^\s]+\.com[^\s]*',
-            r'[^\s]+\.in[^\s]*',
-            r'[^\s]+\.org[^\s]*',
-            r'@[\w]+'
+            r'https?://[^\s]+',  # HTTP/HTTPS links
+            r'(?<![\@\.])[t]\.me/[^\s]+',  # Telegram links (fixed)
+            r'telegram\.me/[^\s]+',  # Telegram alternative
+            r'www\.[^\s]+',  # WWW links
+            r'bit\.ly/[^\s]+',  # Bitly links
+            r'ow\.ly/[^\s]+',  # Owly links
+            r'tinyurl\.com/[^\s]+',  # TinyURL links
+            r'youtu\.be/[^\s]+',  # YouTube short links
+            r'facebookhttps?://[^\s|]+',  # Facebook links
+            r'(?<![\w/.-])(?:(?:\w+\.)+(?:com|org|net|co|in|io|gov|edu|uk))\b',  # Domain detection
         ]
+        
         has_link = any(re.search(p, text, re.IGNORECASE) for p in link_patterns)
-        if has_link and not await is_owner(user.id):
+        
+        # Check for mentions which might be promotion
+        mention_count = len(re.findall(r'@[\w]+', text))
+        has_spam_mentions = mention_count > 3
+        
+        if (has_link or has_spam_mentions) and not await is_owner(user.id):
             try:
                 await message.delete()
+                reason = "link detected" if has_link else f"spam mentions ({mention_count})"
                 warning_msg = await update.message.reply_text(
-                    create_ui_box("ANTILINK", f"🚫 {user.first_name} link bhejna allowed nahi hai\n\nsirf owner link bhej sakta hai", "🔗")
+                    create_ui_box("ANTILINK ALERT", f"🚫 {user.first_name}\n{reason}\n\nadmin link bhej sakta", "🔗")
                 )
+                
+                # Log action
+                db.log_action(chat.id, "ANTILINK", user.id, user.first_name or "Unknown", 
+                            context.bot.id, "HINATA", reason)
+                
                 context.job_queue.run_once(
                     delete_message_after,
-                    10,
+                    1,
                     chat_id=chat.id,
                     data=warning_msg.message_id
                 )
-            except:
+            except Exception as e:
                 pass
             return
     
@@ -926,7 +1014,7 @@ async def check_filters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     )
                     context.job_queue.run_once(
                         delete_message_after,
-                        10,
+                        1,
                         chat_id=chat.id,
                         data=warning_msg.message_id
                     )
@@ -946,7 +1034,7 @@ async def check_filters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 context.job_queue.run_once(
                     delete_message_after,
-                    10,
+                    1,
                     chat_id=chat.id,
                     data=warning_msg.message_id
                 )
@@ -973,7 +1061,7 @@ async def check_filters(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 context.job_queue.run_once(
                     delete_message_after,
-                    10,
+                    1,
                     chat_id=chat.id,
                     data=warning_msg.message_id
                 )
@@ -989,6 +1077,17 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     
     if query.data == 'close_msg':
+        try:
+            await query.message.delete()
+        except:
+            pass
+        return
+    
+    # Handle lock commands
+    if query.data.startswith('lock_'):
+        lock_type = query.data.replace('lock_', '')
+        # Create a fake update to reuse the _apply_lock function
+        await _apply_lock(lock_type, query, context)
         try:
             await query.message.delete()
         except:

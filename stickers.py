@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
 """
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║  🎨 HINATA STICKER & GIF MANAGER v4.0                                     ║
-║  1000+ FREE Anime Stickers | Hinata/Naruto Themed | No API                ║
+║  🎨 HINATA STICKER & GIF MANAGER v5.0                                     ║
+║  1000+ FREE Anime Stickers + GIF Support | Auto-Collection              ║
+║  Database-Backed | Learning from Groups | No API                          ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
 """
 
 import random
-from typing import List
+from typing import List, Optional
 
 class StickerManager:
-    """Free Anime Sticker & GIF Collection - 100% Free!"""
+    """Advanced Anime Sticker & GIF Collection with Auto-Learning"""
     
-    def __init__(self):
+    def __init__(self, db=None):
+        self.db = db
         self._init_stickers()
         self._init_gifs()
+    
+    def _init_stickers(self):
+        """Initialize 1000+ anime stickers"""
     
     def _init_stickers(self):
         """Initialize 1000+ anime stickers"""
@@ -310,3 +315,43 @@ class StickerManager:
         if self.naruto_gifs:
             return random.choice(self.naruto_gifs)
         return self.get_random_gif()
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # 🎨 STICKER COLLECTION & LEARNING SYSTEM
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    def save_sticker(self, file_id: str, file_unique_id: str, sticker_type: str = "regular",
+                     set_name: str = "", user_id: int = 0, chat_id: int = 0) -> bool:
+        """Save sticker to database for later use"""
+        if not self.db:
+            return False
+        try:
+            self.db.add_sticker(file_id, file_unique_id, sticker_type, set_name, user_id, chat_id)
+            return True
+        except Exception as e:
+            print(f"Error saving sticker: {e}")
+            return False
+    
+    def get_collected_sticker(self, sticker_type: str = "regular") -> Optional[str]:
+        """Get sticker from collected stickers"""
+        if not self.db:
+            return self.get_random_sticker()
+        try:
+            return self.db.get_random_sticker(sticker_type)
+        except:
+            return self.get_random_sticker()
+    
+    def get_best_sticker(self) -> str:
+        """Get best sticker - prefer collected ones, then fallback to default"""
+        collected = self.get_collected_sticker()
+        if collected:
+            return collected
+        return self.get_random_sticker()
+    
+    def respond_to_sticker(self) -> str:
+        """Generate sticker response (GIF or sticker)"""
+        # 70% chance to respond with GIF, 30% with sticker
+        if random.random() < 0.7:
+            return self.get_random_gif()  # GIF response
+        else:
+            return self.get_best_sticker()  # Collected or default sticker

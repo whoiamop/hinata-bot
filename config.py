@@ -31,6 +31,17 @@ class Config:
     OWNER_USERNAME = ""  # Optional: @username
     
     # ═══════════════════════════════════════════════════════════════════════
+    # 🏠 HOME GROUP SETTINGS
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    # Home Group/Support Chat Link
+    HOME_GROUP_LINK = "https://t.me/+IRcFK0cV_DcyZWQ1"
+    HOME_GROUP_ID = None  # Will be set automatically
+    
+    # Helper/Support Group
+    SUPPORT_GROUP_LINK = "https://t.me/+IRcFK0cV_DcyZWQ1"
+    
+    # ═══════════════════════════════════════════════════════════════════════
     # 🤖 BOT INFO
     # ═══════════════════════════════════════════════════════════════════════
     
@@ -77,11 +88,55 @@ class Config:
     # ═══════════════════════════════════════════════════════════════════════
     
     # Chatbot Trigger Words
-    CHATBOT_TRIGGERS = ['hinata', 'hinata-chan', 'ヒナタ']
+    CHATBOT_TRIGGERS = ['hinata', 'hinata-chan', 'ヒナタ', 'hana', 'bot']
     
     # Chatbot Response Settings
     CHATBOT_REPLY_RATE = 0.3  # 30% chance to send GIF with response
     CHATBOT_TYPING_DELAY = 0.5  # Seconds
+    
+    # AI Response Style - "friendly", "cool", "girl", "casual"
+    CHATBOT_STYLE = "girl"  # Like a real girl with short responses
+    
+    # Max response length (characters)
+    CHATBOT_MAX_LENGTH = 150
+    
+    # Use Memory System
+    CHATBOT_MEMORY_ENABLED = True
+    
+    # Response temperature (0-1, higher = more creative)
+    CHATBOT_TEMPERATURE = 0.7
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # 🧠 MEMORY & LEARNING SYSTEM
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    # Enable conversation memory
+    MEMORY_ENABLED = True
+    
+    # Store conversation history
+    STORE_CONVERSATIONS = True
+    
+    # Max conversation history to store
+    HISTORY_LIMIT = 30
+    
+    # Enable auto-learning from conversations
+    AUTO_LEARN = True
+    
+    # Learning threshold (confidence level for saving responses)
+    LEARNING_THRESHOLD = 0.7
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # 📊 DATASET SETTINGS
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    # Use custom dataset for responses
+    USE_CUSTOM_DATASET = True
+    
+    # Dataset min usage count before using
+    DATASET_MIN_USAGE = 1
+    
+    # Build dataset from conversations
+    BUILD_FROM_CONVERSATIONS = True
     
     # ═══════════════════════════════════════════════════════════════════════
     # 🎨 STICKER SETTINGS

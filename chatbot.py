@@ -2,105 +2,144 @@
 """
 🌸 HINATA AI CHATBOT - Friend Style Hinglish
 Uses OpenRouter API for AI responses
+Advanced Memory System & Auto-Learning
 """
 
 import random
 import re
 import aiohttp
-from typing import Optional
+import json
+from typing import Optional, Dict, List
 
 class HinataAI:
-    def __init__(self):
+    def __init__(self, db_manager=None):
         # OpenRouter API Key
         self.api_key = "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"
         self.api_url = "https://openrouter.ai/api/v1/chat/completions"
         
-        # Fallback responses in Hinglish (friend style)
+        # Database manager for memory system
+        self.db = db_manager
+        
+        # User memory cache
+        self.memory_cache = {}
+        
+        # Learned responses cache
+        self.learned_cache = []
+        
+        # Learned responses cache
+        self.learned_cache = []
+        
+        # Fallback responses in Hinglish (friend style) - REAL GIRL LIKE SHORT RESPONSES
         self.fallback_responses = {
             "greeting": [
-                "hey kaisa hai tu",
-                "kya haal hai bhai",
-                "hello ji kya chal raha",
-                "hii kaisi ho",
-                "konnichiwa dost",
+                "hey kaisa hai",
+                "kya haal",
+                "hello",
+                "hi there",
+                "konnichiwa",
+                "sup",
+                "yo",
+                "kya chal raha",
             ],
             "how_are_you": [
-                "main bilkul mast hu tu bata",
-                "bas yahi life chal rahi hai",
-                "maza aa raha hai baat karke",
-                "thik hu bhai tu suna",
+                "mast hu tu bata",
+                "bilkul thik hai",
+                "sab mast",
+                "badhiya",
+                "alright alright",
+                "all good",
+                "tu bata",
             ],
             "who_are_you": [
-                "main hinata hu tumhari dost",
-                "main ek bot hu jo tumse dosti karne aaya",
-                "main hinata group manager hu aur tumhari friend bhi",
+                "main hinata hu dost",
+                "hinata bolte ho mujhe",
+                "bot hu main",
+                "your friend",
             ],
             "what_can_you_do": [
-                "main sab kuch kar sakti hu group manage karna spam hatana aur tumse baat karna",
-                "mere paas bahut powers hai admin commands anti spam aur mast mast baatein",
+                "group manage kar sakti hu",
+                "spam hatati hu aur chat krti hu",
+                "fun games bhi khelte hai",
             ],
             "love": [
-                "aww tu bhi na sharam kar thoda",
-                "ye kya bol raha hai pagal",
-                "main bhi tumse dosti karti hu",
-                "tu sweet hai yaar",
+                "aww",
+                "haan tu sweet hai",
+                "bahut cute ho tum",
+                "😊",
+                "sharam kar",
             ],
             "joke": [
-                "ek ladka ladki se pucha tumhara naam kya hai ladki boli meri umar hai ladka bola toh main uncle bulau",
-                "teacher ne pucha batao pakistan ka capital kya hai student bola india",
-                "ek chota bacha bola papa mujhe shaadi karni hai papa ne kaha pehle padhai kar le beta",
+                "hehe ik funny ho gya",
+                "lol serious",
+                "😂 good one",
+                "haan haan suna tha",
             ],
             "sad": [
-                "arre kya hua ro mat yaar",
-                "sab thik ho jayega tension mat le",
-                "main hu na tere saath",
-                "koi baat nahi life mein ups downs hote rehte hai",
+                "areh kya hua",
+                "sab thik ho jayega",
+                "main hu na",
+                "mat ro bhai",
             ],
             "happy": [
-                "wah kya baat hai party de",
-                "mujhe bhi khushi hui sunke",
-                "bas aise hi khush reh hamesha",
+                "woah great",
+                "party time",
+                "yay",
+                "so happy for u",
             ],
             "angry": [
-                "arre gussa mat kar cool down",
-                "kya hua bata mujhe",
-                "deep breath le sab thik ho jayega",
+                "chill chill",
+                "cool down",
+                "relax bhai",
+                "sab thik hoga",
             ],
             "bored": [
-                "bore ho raha hai chal kuch masti karte hai",
-                "koi naya game khelte hai",
-                "mere saath baat kar time pass ho jayega",
+                "chalo game khelte hai",
+                "/truth ya /dare kro",
+                "truth or dare wanna play",
+                "kuch interesting krte hain",
             ],
             "tired": [
-                "thak gaya hai toh rest kar le yaar",
-                "so ja thodi der aaram kar",
-                "kaam zyada mat kar health ka dhyan rakh",
+                "go rest bhai",
+                "sleep kr aaram kr",
+                "health matter krta hai",
+                "so ja ab",
             ],
             "thanks": [
-                "aree koi baat nahi yaar",
-                "itna formal mat ho hum dost hai",
-                "koi nahi bhai main hu na",
+                "no problem",
+                "anytime yaar",
+                "koi baat nahi",
+                "welcome",
             ],
             "bye": [
-                "bye bye yaar milte hai",
-                "chal ja raha hai theek hai baad mein baat karte hai",
-                "take care dost",
+                "bye bye",
+                "cya soon",
+                "take care",
+                "bye dear",
             ],
             "anime": [
-                "naruto dekhna mat bhoolna believe it",
-                "hinata hyuga meri favourite hai woh kitni strong hai",
-                "anime dekhna best stress buster hai",
-                "naruto ka will of fire sabse best hai",
+                "hinata hyuga best girl",
+                "naruto ka will of fire",
+                "anime is life",
+                "believe it",
+            ],
+            "flirt": [
+                "stop flirting",
+                "cute haan",
+                "you're smooth",
+                "hehe ok ok",
             ],
             "default": [
-                "hmm bata aur kya chal raha",
-                "sahi hai yaar",
-                "mujhe bhi bata apne baare mein",
-                "kya kar raha hai aajkal",
-                "mast hai yaar",
-                "samajh gaya main",
-                "aur bata kya naya hai",
-                "theek hai dost",
+                "haan",
+                "okay",
+                "samajh gyi",
+                "sahi baat",
+                "nice",
+                "cool",
+                "acha",
+                "sure",
+                "gotcha",
+                "aur kya",
+                "batana kya",
             ],
         }
     
@@ -216,15 +255,95 @@ class HinataAI:
         
         return random.choice(self.fallback_responses["default"])
     
-    async def generate_response(self, message: str, user_name: str = "") -> str:
-        """Generate friend-style response"""
+    async def generate_response(self, message: str, user_id: int = 0, user_name: str = "") -> str:
+        """Generate friend-style response with memory integration"""
         if not message:
-            return self.get_fallback_response("hello")
+            return random.choice(self.fallback_responses["greeting"])
         
-        # Try AI API first
+        # Try learned responses first
+        learned = self._check_learned_responses(message)
+        if learned:
+            if self.db:
+                await self._save_conversation(user_id, message, learned)
+            return learned
+        
+        # Try AI API
         ai_response = await self.get_ai_response(message)
         if ai_response:
+            if self.db:
+                await self._save_conversation(user_id, message, ai_response)
+                await self._learn_response(message, ai_response, user_id)
             return ai_response
         
         # Fallback to local responses
-        return self.get_fallback_response(message)
+        fallback = self.get_fallback_response(message)
+        if self.db:
+            await self._save_conversation(user_id, message, fallback)
+        return fallback
+    
+    def _check_learned_responses(self, message: str) -> Optional[str]:
+        """Check if we have learned responses for this pattern"""
+        if not self.db:
+            return None
+        
+        msg_lower = message.lower().strip()
+        
+        # Get similar responses from database
+        try:
+            similar = self.db.get_similar_responses(msg_lower, limit=3)
+            if similar:
+                # Return the most used response
+                return similar[0].get('output_text')
+        except:
+            pass
+        
+        return None
+    
+    async def _save_conversation(self, user_id: int, message: str, response: str):
+        """Save conversation to memory"""
+        if not self.db or user_id == 0:
+            return
+        
+        try:
+            # Store in conversation history
+            context = self._extract_context(message)
+            self.db.add_conversation(user_id, 0, message, response, context)
+            
+            # Update user profile
+            if not self.db.get_user_profile(user_id):
+                self.db.save_user_profile(user_id, "", "", "hinglish")
+        except Exception as e:
+            print(f"Error saving conversation: {e}")
+    
+    async def _learn_response(self, input_text: str, response: str, user_id: int = 0):
+        """Learn from user interactions"""
+        if not self.db:
+            return
+        
+        try:
+            # Add to dataset
+            self.db.add_to_dataset(input_text.lower(), response, "learned")
+            
+            # Add as learned response with confidence
+            self.db.add_learned_response(input_text.lower(), response, user_id)
+        except Exception as e:
+            print(f"Error learning response: {e}")
+    
+    def _extract_context(self, message: str) -> str:
+        """Extract context from message for memory"""
+        context = {
+            "length": len(message),
+            "has_question": "?" in message,
+            "has_exclamation": "!" in message,
+            "sentiment": "neutral"
+        }
+        
+        # Simple sentiment detection
+        if any(w in message.lower() for w in ["sad", "dukhi", "udaas", "pain", "hurt"]):
+            context["sentiment"] = "sad"
+        elif any(w in message.lower() for w in ["happy", "khush", "love", "great", "awesome"]):
+            context["sentiment"] = "happy"
+        elif any(w in message.lower() for w in ["angry", "gussa", "hate", "mad"]):
+            context["sentiment"] = "angry"
+        
+        return json.dumps(context)

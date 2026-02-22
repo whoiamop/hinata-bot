@@ -198,12 +198,101 @@ class DatabaseManager:
                 )
             ''')
             
+            # Memory System - User Conversations
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_memory (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    context_key TEXT NOT NULL,
+                    context_value TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(user_id, context_key)
+                )
+            ''')
+            
+            # Memory System - Conversation History
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS conversation_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    chat_id INTEGER,
+                    message TEXT NOT NULL,
+                    response TEXT,
+                    context TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Learning Dataset
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS learning_dataset (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    input_text TEXT NOT NULL,
+                    output_text TEXT NOT NULL,
+                    category TEXT,
+                    usage_count INTEGER DEFAULT 0,
+                    rating REAL DEFAULT 0.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(input_text, output_text)
+                )
+            ''')
+            
+            # Sticker Collection
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS stickers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    file_id TEXT NOT NULL,
+                    file_unique_id TEXT UNIQUE,
+                    sticker_type TEXT,
+                    set_name TEXT,
+                    added_by INTEGER,
+                    added_from_chat INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # User Profiles with Preferences
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_profiles (
+                    user_id INTEGER PRIMARY KEY,
+                    first_name TEXT,
+                    username TEXT,
+                    language TEXT DEFAULT 'hinglish',
+                    response_style TEXT DEFAULT 'friendly',
+                    last_interaction TIMESTAMP,
+                    interaction_count INTEGER DEFAULT 0,
+                    preferences TEXT DEFAULT '{}',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Bot Learned Responses
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS learned_responses (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pattern TEXT NOT NULL,
+                    response TEXT NOT NULL,
+                    confidence REAL DEFAULT 0.8,
+                    learned_from_user INTEGER,
+                    usage_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
             # Create indexes for faster queries
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_filter_words_chat ON filter_words(chat_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_blocklist_chat ON blocklist(chat_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_warnings_chat ON warnings(chat_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_chat ON action_logs(chat_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_stats_chat_user ON user_stats(chat_id, user_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_memory ON user_memory(user_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_conversation_history ON conversation_history(user_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_learning_dataset ON learning_dataset(category)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_stickers_added_by ON stickers(added_by)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_profiles ON user_profiles(user_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_learned_responses ON learned_responses(pattern)')
             
             conn.commit()
             logger.info("✅ All database tables initialized")
@@ -571,6 +660,162 @@ class DatabaseManager:
                 ORDER BY created_at DESC
                 LIMIT ?
             ''', (chat_id, limit))
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+    
+    # ═══════════════════════════════════════════════════════════════════════
+    # 🧠 MEMORY SYSTEM METHODS
+    # ═══════════════════════════════════════════════════════════════════════
+    
+    def save_user_memory(self, user_id: int, key: str, value: str):
+        """Save user memory/context"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO user_memory (user_id, context_key, context_value)
+                VALUES (?, ?, ?)
+                ON CONFLICT(user_id, context_key) 
+                DO UPDATE SET context_value = ?, updated_at = CURRENT_TIMESTAMP
+            ''', (user_id, key, value, value))
+    
+    def get_user_memory(self, user_id: int, key: str = None) -> Union[str, Dict[str, str]]:
+        """Get user memory/context"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            if key:
+                cursor.execute('''
+                    SELECT context_value FROM user_memory 
+                    WHERE user_id = ? AND context_key = ?
+                ''', (user_id, key))
+                row = cursor.fetchone()
+                return row['context_value'] if row else None
+            else:
+                cursor.execute('''
+                    SELECT context_key, context_value FROM user_memory 
+                    WHERE user_id = ?
+                ''', (user_id,))
+                rows = cursor.fetchall()
+                return {row['context_key']: row['context_value'] for row in rows}
+    
+    def add_conversation(self, user_id: int, chat_id: int, message: str, response: str, context: str = ""):
+        """Add conversation to history for learning"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO conversation_history (user_id, chat_id, message, response, context)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (user_id, chat_id, message, response, context))
+    
+    def get_conversation_history(self, user_id: int, limit: int = 20) -> List[Dict]:
+        """Get conversation history for context"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT message, response, context, created_at 
+                FROM conversation_history 
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+            ''', (user_id, limit))
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows][::-1]  # Reverse to get chronological order
+    
+    def add_to_dataset(self, input_text: str, output_text: str, category: str = "general"):
+        """Add learned response to dataset"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO learning_dataset (input_text, output_text, category)
+                VALUES (?, ?, ?)
+                ON CONFLICT(input_text, output_text) 
+                DO UPDATE SET usage_count = usage_count + 1
+            ''', (input_text, output_text, category))
+    
+    def get_similar_responses(self, input_text: str, limit: int = 5) -> List[Dict]:
+        """Get similar responses from dataset"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT output_text, usage_count, rating 
+                FROM learning_dataset 
+                WHERE input_text LIKE ?
+                ORDER BY usage_count DESC, rating DESC
+                LIMIT ?
+            ''', (f"%{input_text}%", limit))
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+    
+    def add_sticker(self, file_id: str, file_unique_id: str, sticker_type: str = "regular",
+                   set_name: str = "", added_by: int = 0, chat_id: int = 0):
+        """Add sticker to collection"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR IGNORE INTO stickers (file_id, file_unique_id, sticker_type, set_name, added_by, added_from_chat)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (file_id, file_unique_id, sticker_type, set_name, added_by, chat_id))
+    
+    def get_random_sticker(self, sticker_type: str = "regular") -> Optional[str]:
+        """Get random sticker of type"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT file_id FROM stickers 
+                WHERE sticker_type = ?
+                ORDER BY RANDOM()
+                LIMIT 1
+            ''', (sticker_type,))
+            row = cursor.fetchone()
+            return row['file_id'] if row else None
+    
+    def save_user_profile(self, user_id: int, first_name: str = "", username: str = "", 
+                         language: str = "hinglish", preferences: Dict = None):
+        """Save/Update user profile"""
+        if preferences is None:
+            preferences = {}
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO user_profiles (user_id, first_name, username, language, preferences)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(user_id) 
+                DO UPDATE SET first_name = ?, username = ?, language = ?, preferences = ?, updated_at = CURRENT_TIMESTAMP
+            ''', (user_id, first_name, username, language, json.dumps(preferences),
+                  first_name, username, language, json.dumps(preferences)))
+    
+    def get_user_profile(self, user_id: int) -> Optional[Dict]:
+        """Get user profile"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT * FROM user_profiles WHERE user_id = ?
+            ''', (user_id,))
+            row = cursor.fetchone()
+            if row:
+                profile = dict(row)
+                profile['preferences'] = json.loads(row['preferences'])
+                return profile
+            return None
+    
+    def add_learned_response(self, pattern: str, response: str, learned_from: int = 0):
+        """Add learned response pattern"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO learned_responses (pattern, response, learned_from_user)
+                VALUES (?, ?, ?)
+            ''', (pattern, response, learned_from))
+    
+    def get_learned_responses(self, limit: int = 100) -> List[Dict]:
+        """Get learned responses sorted by confidence"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT id, pattern, response, confidence, usage_count 
+                FROM learned_responses 
+                ORDER BY confidence DESC, usage_count DESC
+                LIMIT ?
+            ''', (limit,))
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
     
