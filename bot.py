@@ -162,14 +162,17 @@ async def delete_message_after(context: ContextTypes.DEFAULT_TYPE):
         pass
 
 async def auto_delete_message(update: Update, context: ContextTypes.DEFAULT_TYPE, seconds=30):
-    if update.message:
-        context.job_queue.run_once(
-            delete_message_after,
-            seconds,
-            chat_id=update.effective_chat.id,
-            data=update.message.message_id,
-            name=f"delete_{update.message.message_id}"
-        )
+    if update.message and context.job_queue:
+        try:
+            context.job_queue.run_once(
+                delete_message_after,
+                seconds,
+                chat_id=update.effective_chat.id,
+                data=update.message.message_id,
+                name=f"delete_{update.message.message_id}"
+            )
+        except:
+            pass
 
 # ============ BASIC COMMANDS ============
 
@@ -249,10 +252,42 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     keyboard = create_inline_keyboard_with_close([
         [InlineKeyboardButton("🎮 Play Games", callback_data="play_games")],
-        [InlineKeyboardButton("🎯 Earn Coins", callback_data="earn_coins")]
+        [InlineKeyboardButton("🎯 Earn Coins", callback_data="earn_coins")],
+        [InlineKeyboardButton("🎁 Daily Bonus", callback_data="daily_bonus")]
     ])
     msg = await update.message.reply_text(text, reply_markup=keyboard)
     await auto_delete_message(update, context, 60)
+
+async def daily_bonus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Claim daily bonus coins"""
+    try:
+        user = update.effective_user
+        success, amount = db.claim_daily_bonus(user.id, 500)
+        
+        if success:
+            text = create_ui_box(
+                "🎁 DAILY BONUS CLAIMED!",
+                f"🎉 You got {amount} coins!\n"
+                f"💰 Come back tomorrow for more!",
+                "🎁"
+            )
+            emoji = "🎉"
+        else:
+            text = create_ui_box(
+                "⏰ BONUS NOT READY",
+                f"⏳ Come back in {amount} hours\n"
+                f"🎁 You get 500 coins every 24 hours",
+                "⏳"
+            )
+            emoji = "⏳"
+        
+        keyboard = create_inline_keyboard_with_close([
+            [InlineKeyboardButton("💰 Check Balance", callback_data="my_balance")]
+        ])
+        msg = await update.message.reply_text(text, reply_markup=keyboard)
+        await auto_delete_message(update, context, 30)
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {str(e)}")
 
 async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show leaderboard"""
@@ -1319,6 +1354,28 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
         await query.edit_message_text(text, reply_markup=keyboard, parse_mode='HTML')
     
+    elif query.data == 'daily_bonus':
+        user = update.effective_user
+        success, amount = db.claim_daily_bonus(user.id, 500)
+        
+        if success:
+            text = create_ui_box(
+                "🎁 DAILY BONUS CLAIMED!",
+                f"🎉 You got {amount} coins!\n"
+                f"💰 Come back tomorrow for more!",
+                "🎁"
+            )
+        else:
+            text = create_ui_box(
+                "⏰ BONUS NOT READY",
+                f"⏳ Come back in {amount} hours\n"
+                f"🎁 You get 500 coins every 24 hours",
+                "⏳"
+            )
+        
+        keyboard = create_inline_keyboard_with_close()
+        await query.edit_message_text(text, reply_markup=keyboard)
+    
     elif query.data == 'earn_coins':
         text = create_ui_box(
             "🎮 EARN COINS",
@@ -1344,11 +1401,17 @@ def main():
     print("""
     ==============================
       HINATA BOT - Created By Axl
-      Version 2.0 - Zero Errors
+      Version 4.5 - ULTIMATE
       Starting...
     ==============================
     """)
     application = Application.builder().token(BOT_TOKEN).build()
+    
+    # Enable job queue for scheduled tasks
+    job_queue = application.job_queue
+    if job_queue:
+        job_queue.start()
+    
     application.add_error_handler(error_handler)
     
     # Basic commands
@@ -1409,6 +1472,7 @@ def main():
     # Balance & Leaderboard commands
     application.add_handler(CommandHandler("balance", balance_command))
     application.add_handler(CommandHandler("leaderboard", leaderboard_command))
+    application.add_handler(CommandHandler("daily", daily_bonus_command))
     application.add_handler(CommandHandler("earn", earn_command))
     application.add_handler(CommandHandler("mysticker", mysticker_command))
     application.add_handler(CommandHandler("mygif", mygif_command))

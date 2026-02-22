@@ -915,7 +915,44 @@ class DatabaseManager:
                     DO UPDATE SET games_played = games_played + 1, updated_at = CURRENT_TIMESTAMP
                 ''', (user_id,))
     
-    # ═══════════════════════════════════════════════════════════════════════
+    def claim_daily_bonus(self, user_id: int, bonus_amount: int = 500):
+        """Claim daily bonus - once per day per user"""
+        from datetime import datetime, timedelta
+        
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Check last earn time
+            cursor.execute('''
+                SELECT last_earn FROM user_balance WHERE user_id = ?
+            ''', (user_id,))
+            
+            row = cursor.fetchone()
+            now = datetime.now()
+            
+            if row and row[0]:
+                try:
+                    last_earn = datetime.fromisoformat(row[0])
+                    # Check if less than 24 hours have passed
+                    if (now - last_earn).total_seconds() < 86400:  # 86400 seconds = 24 hours
+                        hours_left = 24 - int((now - last_earn).total_seconds() / 3600)
+                        return False, hours_left
+                except:
+                    pass
+            
+            # Add bonus
+            self.add_balance(user_id, bonus_amount, "daily_bonus")
+            
+            # Update last_earn timestamp
+            cursor.execute('''
+                INSERT INTO user_balance (user_id, last_earn)
+                VALUES (?, ?)
+                ON CONFLICT(user_id)
+                DO UPDATE SET last_earn = ?
+            ''', (user_id, now.isoformat(), now.isoformat()))
+            
+            return True, bonus_amount
+        # ═══════════════════════════════════════════════════════════════════════
     # �🔧 MAINTENANCE METHODS
     # ═══════════════════════════════════════════════════════════════════════
     

@@ -8,6 +8,7 @@ Advanced Memory System & Auto-Learning
 import random
 import re
 import aiohttp
+import asyncio
 import json
 import os
 from typing import Optional, Dict, List
@@ -38,97 +39,114 @@ class HinataAI:
                 "kya haal",
                 "hello",
                 "hi there",
-                "konnichiwa",
-                "sup",
                 "yo",
                 "kya chal raha",
+                "sup",
+                "hey wassup",
             ],
             "how_are_you": [
                 "mast hu tu bata",
                 "bilkul thik hai",
                 "sab mast",
                 "badhiya",
-                "alright alright",
+                "bilkul accha",
                 "all good",
-                "tu bata",
+                "tu bata kya chal raha",
+                "sab accha",
             ],
             "who_are_you": [
                 "main hinata hu dost",
                 "hinata bolte ho mujhe",
-                "bot hu main",
-                "your friend",
+                "bot hu main group manage krti hu",
+                "your friend hinata",
+                "i'm hinata your friendly bot",
             ],
             "what_can_you_do": [
                 "group manage kar sakti hu",
                 "spam hatati hu aur chat krti hu",
-                "fun games bhi khelte hai",
+                "games bhi khel sakte hain",
+                "mast games khelte hain",
             ],
             "love": [
-                "aww",
-                "haan tu sweet hai",
-                "bahut cute ho tum",
-                "😊",
-                "sharam kar",
+                "aww sweet",
+                "haan tu cute lag raha",
+                "bahut pyaar",
+                "thanks yaar",
+                "hehe ok",
+                "🥰",
             ],
             "joke": [
                 "hehe ik funny ho gya",
-                "lol serious",
+                "lol suna tha",
                 "😂 good one",
-                "haan haan suna tha",
+                "haan funny tha",
+                "😂😂",
             ],
             "sad": [
                 "areh kya hua",
                 "sab thik ho jayega",
-                "main hu na",
+                "main hu na tere se",
                 "mat ro bhai",
+                "hang in there",
+                "sab kuch thik hoga",
             ],
             "happy": [
                 "woah great",
-                "party time",
-                "yay",
+                "yay celebrate",
                 "so happy for u",
+                "that's great",
+                "awesome 🎉",
             ],
             "angry": [
                 "chill chill",
                 "cool down",
                 "relax bhai",
                 "sab thik hoga",
+                "breathe",
             ],
             "bored": [
                 "chalo game khelte hai",
                 "/truth ya /dare kro",
-                "truth or dare wanna play",
+                "truth or dare?",
                 "kuch interesting krte hain",
+                "kuch masti krte ho",
             ],
             "tired": [
                 "go rest bhai",
                 "sleep kr aaram kr",
                 "health matter krta hai",
                 "so ja ab",
+                "take rest",
             ],
             "thanks": [
                 "no problem",
                 "anytime yaar",
                 "koi baat nahi",
                 "welcome",
+                "glad to help",
+                "bilkul",
             ],
             "bye": [
                 "bye bye",
                 "cya soon",
                 "take care",
                 "bye dear",
+                "later",
+                "see you",
             ],
             "anime": [
-                "hinata hyuga best girl",
+                "hinata is best",
+                "anime rocks",
                 "naruto ka will of fire",
-                "anime is life",
                 "believe it",
+                "dattebayou",
             ],
             "flirt": [
                 "stop flirting",
-                "cute haan",
+                "hehe",
                 "you're smooth",
-                "hehe ok ok",
+                "haha ok",
+                "cute",
             ],
             "default": [
                 "haan",
@@ -142,11 +160,13 @@ class HinataAI:
                 "gotcha",
                 "aur kya",
                 "batana kya",
+                "bilkul",
+                "accha bilkul",
             ],
         }
     
     async def get_ai_response(self, message: str) -> Optional[str]:
-        """Get response from OpenRouter AI"""
+        """Get response from OpenRouter AI with proper error handling"""
         try:
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
@@ -160,29 +180,46 @@ class HinataAI:
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are Hinata, a friendly Indian girl who speaks in Hinglish (Roman Hindi + English mix). You chat like a normal friend - casual, warm, and friendly. Use simple words, no special formatting like asterisks or hashtags. Keep responses short and natural like texting a friend. Never use markdown formatting."
+                        "content": "You are Hinata, a friendly girl who speaks casual Hinglish (mix of Hindi and English). Be short, friendly, and natural like texting a friend. No markdown, no formatting, just simple text."
                     },
                     {
                         "role": "user",
                         "content": message
                     }
                 ],
-                "max_tokens": 150,
-                "temperature": 0.8
+                "max_tokens": 100,
+                "temperature": 0.7
             }
             
             async with aiohttp.ClientSession() as session:
-                async with session.post(self.api_url, headers=headers, json=data, timeout=30) as response:
-                    if response.status == 200:
-                        result = await response.json()
-                        if 'choices' in result and len(result['choices']) > 0:
-                            ai_response = result['choices'][0]['message']['content']
-                            # Clean the response
-                            ai_response = self._clean_response(ai_response)
-                            return ai_response
-                    else:
-                        print(f"OpenRouter error: {response.status}")
-                        return None
+                try:
+                    async with session.post(self.api_url, headers=headers, json=data, timeout=10) as response:
+                        if response.status == 200:
+                            try:
+                                result = await response.json()
+                                if result.get('choices') and len(result['choices']) > 0:
+                                    ai_response = result['choices'][0]['message']['content'].strip()
+                                    if ai_response:
+                                        ai_response = self._clean_response(ai_response)
+                                        return ai_response
+                            except Exception as parse_error:
+                                print(f"Error parsing OpenRouter response: {parse_error}")
+                                return None
+                        elif response.status == 429:
+                            print("OpenRouter rate limited - using fallback")
+                            return None
+                        elif response.status == 401:
+                            print("OpenRouter auth failed - invalid key")
+                            return None
+                        else:
+                            print(f"OpenRouter error: {response.status}")
+                            return None
+                except asyncio.TimeoutError:
+                    print("OpenRouter timeout - using fallback")
+                    return None
+                except Exception as req_error:
+                    print(f"Request error: {req_error}")
+                    return None
         except Exception as e:
             print(f"AI API error: {e}")
             return None
